@@ -227,8 +227,50 @@ lock_acquire (struct lock *lock) {
 	ASSERT (!intr_context ());
 	ASSERT (!lock_held_by_current_thread (lock));
 
+	struct thread *current = thread_current ();
+	struct thread *holder;
+	enum intr_level old_level;
+
+	old_level = intr_disable ();
+
+	if (lock->holder != NULL) {
+		current->waiting_lock = lock;
+
+		/* 현재 Lock 소유자의 기부 목록에 등록 */
+		list_push_back (&lock->holder->donations,
+						&current->donation_elem);
+
+		/* 중첩된 Lock 대기 관계에도 우선순위 전달 */
+		holder = lock->holder;
+
+		/* 높은 우선순위를 Lock 소유자에게 기부 */
+		while (holder != NULL &&
+			   holder->priority < current->priority) {
+
+			holder->priority = current->priority;
+
+			/* 다른 Lock를 기다리고 있다면 기부를 연쇄적으로 전달 */
+			if (holder->waiting_lock == NULL)
+				break;
+
+			holder = holder->waiting_lock->holder;
+		}
+	}
+
+	/* 첫 번째 인터럽트 상태 복원 : 반드시 필요 */
+	intr_set_level (old_level);
+
+	/* Lock을 사용할 수 있을 때까지 기다림 */
 	sema_down (&lock->semaphore);
-	lock->holder = thread_current ();
+
+	old_level = intr_disable ();
+
+	/* Lock 획득 후 대기 정보 초기화 */
+	current->waiting_lock = NULL;
+	lock->holder = current;
+
+	/* 인터럽트를 이전 상태로 복원 */
+	intr_set_level (old_level);
 }
 
 /* Tries to acquires LOCK and returns true if successful or false
@@ -261,8 +303,52 @@ lock_release (struct lock *lock) {
 	ASSERT (lock != NULL);
 	ASSERT (lock_held_by_current_thread (lock));
 
-	lock->holder = NULL;
-	sema_up (&lock->semaphore);
+	struct thread *current = thread_current();
+	struct list_elem *e;
+	enum intr_level old_level;
+	int new_priority;
+
+	old_level = intr_disable ();
+
+	/* 1. 지금 해제하는 Lock 때문에 발생한 기부만 제거 */
+	e = list_begin (&current->donations);
+
+	while (e != list_end (&current->donations)) {
+		struct thread *donor =
+			list_entry (e, struct thread, donation_elem);
+
+		if (donor->waiting_lock == lock) {
+			e = list_remove (e);
+		} else {
+			e = list_next (e);
+		}
+	}
+
+	/* 2. 원래 우선순위부터 다시 계산 */
+	new_priority = current->base_priority;
+
+	/* 3. 아직 남아 있는 기부 중 가장 높은 우선순위 변경 */
+	for (e = list_begin (&current->donations);
+		 e != list_end (&current->donations);
+		 e = list_next (e)) {
+
+			struct thread *donor =
+				list_entry (e, struct thread, donation_elem);
+
+			if (donor->priority > new_priority)
+				new_priority = donor->priority;
+		 }
+
+		current->priority = new_priority;
+
+		/* 4. Lock을 해제하고 대기자를 깨움 */
+		lock->holder = NULL;
+
+		/* 대기 중인 스레드 깨우기 */
+		sema_up (&lock->semaphore);
+
+		/* 이전 인터럽트 상태 복원 */
+		intr_set_level (old_level);
 }
 
 /* Returns true if the current thread holds LOCK, false
