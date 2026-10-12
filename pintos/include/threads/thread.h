@@ -112,6 +112,10 @@ struct thread {
 
 	int base_priority;
 	struct lock * waiting_lock;
+
+	/* Priority Donation */
+	struct list donations;				/* 나에게 기부 중인 스레드 목록 */
+	struct list_elem donation_elem;		/* 다른 스레드의 기부 목록에 연결 */
 };
 
 /* If false (default), use round-robin scheduler.
