@@ -135,6 +135,8 @@ thread_start (void) {
 
 /* Called by the timer interrupt handler at each timer tick.
    Thus, this function runs in an external interrupt context. */
+
+//4틱이 지났는지 확인하고 스레드를 바로 교체하지 않고 intr_yield_on_return로 예약만 하는 함수
 void
 thread_tick (void) {
 	struct thread *t = thread_current ();

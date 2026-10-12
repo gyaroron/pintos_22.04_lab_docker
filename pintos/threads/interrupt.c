@@ -270,6 +270,8 @@ intr_context (void) {
    interrupt handler to yield to a new process just before
    returning from the interrupt.  May not be called at any other
    time. */
+
+//4틱이 지났으면 yield_on_return 를 true 로 표시함
 void
 intr_yield_on_return (void) {
 	ASSERT (intr_context ());
@@ -335,6 +337,8 @@ pic_end_of_interrupt (int irq) {
    function is called by the assembly language interrupt stubs in
    intr-stubs.S.  FRAME describes the interrupt and the
    interrupted thread's registers. */
+
+//타이머 틱 신호가 왔을때 실행되는 함수 -> timer.c에서 등록한 timer_interrupt 를 호출함
 void
 intr_handler (struct intr_frame *frame) {
 	bool external;
@@ -376,8 +380,8 @@ intr_handler (struct intr_frame *frame) {
 		in_external_intr = false;
 		pic_end_of_interrupt (frame->vec_no);
 
-		if (yield_on_return)
-			thread_yield ();
+		if (yield_on_return) //4틱이 지났는지 여부. 
+			thread_yield (); //thread_yield() → schedule() → 다른 스레드가 CPU를 받는다.
 	}
 }
 
