@@ -85,44 +85,48 @@ typedef int tid_t;
  * only because they are mutually exclusive: only a thread in the
  * ready state is on the run queue, whereas only a thread in the
  * blocked state is on a semaphore wait list. */
+/* Forward declaration */
+struct lock;
+
 struct thread {
-	/* Owned by thread.c. */
-	tid_t tid;                          /* Thread identifier. */
-	enum thread_status status;          /* Thread state. */
-	char name[16];                      /* Name (for debugging purposes). */
-	int priority;                       /* Priority. */
+    /* Thread 기본 정보 */
+    tid_t tid;
+    enum thread_status status;
+    char name[16];
+    int priority;
 
-	/* Shared between thread.c and synch.c. */
-	struct list_elem elem;              /* List element. */
+    /* Ready list 또는 semaphore 대기 리스트 */
+    struct list_elem elem;
 
-#ifdef USERPROG
-	/* Owned by userprog/process.c. */
-	uint64_t *pml4;                     /* Page map level 4 */
-#endif
-#ifdef VM
-	/* Table for whole virtual memory owned by thread. */
-	struct supplemental_page_table spt;
-#endif
+    /* Alarm Clock */
+    int wakeup_tick;
 
-	/* Owned by thread.c. */
-	struct intr_frame tf;               /* Information for switching */
-	unsigned magic;                     /* Detects stack overflow. */
+    /* Priority Donation */
+    int base_priority;
+    struct lock *waiting_lock;
+    struct list donations;
+    struct list_elem donation_elem;
 
-	int wakeup_tick; //일어날 목표 시간
-
-	int base_priority;
-	struct lock * waiting_lock;
-
-	int nice;
-	int recent_cpu;
-	struct list_elem all_elem;    /* ← 추가: all_list 전용 연결 고리 */
+    /* MLFQS */
+    int nice;
+    int recent_cpu;
+    struct list_elem all_elem;
 
 #ifdef USERPROG
-	uint64_t *pml4;
+    /* User process */
+    uint64_t *pml4;
 #endif
+
 #ifdef VM
-	struct supplemental_page_table spt;
+    /* Virtual memory */
+    struct supplemental_page_table spt;
 #endif
+
+    /* Context switching */
+    struct intr_frame tf;
+
+    /* Stack overflow detection */
+    unsigned magic;
 };
 
 /* If false (default), use round-robin scheduler.
@@ -158,9 +162,6 @@ int thread_get_recent_cpu (void);
 int thread_get_load_avg (void);
 
 void do_iret (struct intr_frame *tf);
-
-
-#include <stdint.h>
 
 /* 17.14 fixed-point format (Pintos Appendix B.6).
    1 sign bit, 17 integer bits, 14 fractional bits. */
