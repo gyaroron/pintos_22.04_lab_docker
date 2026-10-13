@@ -114,7 +114,15 @@ struct thread {
 	struct lock * waiting_lock;
 
 	int nice;
-	float recent_cpu;
+	int recent_cpu;
+	struct list_elem all_elem;    /* ← 추가: all_list 전용 연결 고리 */
+
+#ifdef USERPROG
+	uint64_t *pml4;
+#endif
+#ifdef VM
+	struct supplemental_page_table spt;
+#endif
 };
 
 /* If false (default), use round-robin scheduler.
