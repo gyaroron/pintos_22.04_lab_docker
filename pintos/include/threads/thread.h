@@ -108,10 +108,21 @@ struct thread {
 	struct intr_frame tf;               /* Information for switching */
 	unsigned magic;                     /* Detects stack overflow. */
 
-	int wakeup_tick;
+	int wakeup_tick; //일어날 목표 시간
 
-	int base_priority;
+	int base_priority; 
 	struct lock * waiting_lock;
+
+	int nice;
+	int recent_cpu;
+	struct list_elem all_elem;    /* ← 추가: all_list 전용 연결 고리 */
+
+#ifdef USERPROG
+	uint64_t *pml4;
+#endif
+#ifdef VM
+	struct supplemental_page_table spt;
+#endif
 };
 
 /* If false (default), use round-robin scheduler.
@@ -147,5 +158,58 @@ int thread_get_recent_cpu (void);
 int thread_get_load_avg (void);
 
 void do_iret (struct intr_frame *tf);
+
+
+#include <stdint.h>
+ 
+/* 17.14 fixed-point format (Pintos Appendix B.6).
+   1 sign bit, 17 integer bits, 14 fractional bits. */
+typedef int fixed_t;
+ 
+#define FP_SHIFT 14
+#define F (1 << FP_SHIFT)
+ 
+/* 정수 n -> 고정소수점 */
+static inline fixed_t int_to_fp (int n) { return n * F; }
+ 
+/* 고정소수점 x -> 정수 (0 방향 버림) */
+static inline int fp_to_int_zero (fixed_t x) { return x / F; }
+ 
+/* 고정소수점 x -> 정수 (가장 가까운 정수로 반올림) */
+static inline int fp_to_int_round (fixed_t x)
+{
+  return x >= 0 ? (x + F / 2) / F : (x - F / 2) / F;
+}
+ 
+/* 고정소수점 + 고정소수점 */
+static inline fixed_t add_fp (fixed_t x, fixed_t y) { return x + y; }
+ 
+/* 고정소수점 - 고정소수점 */
+static inline fixed_t sub_fp (fixed_t x, fixed_t y) { return x - y; }
+ 
+/* 고정소수점 + 정수 */
+static inline fixed_t add_mixed (fixed_t x, int n) { return x + n * F; }
+ 
+/* 고정소수점 - 정수 */
+static inline fixed_t sub_mixed (fixed_t x, int n) { return x - n * F; }
+ 
+/* 고정소수점 * 고정소수점 (오버플로 방지를 위해 64비트로 계산) */
+static inline fixed_t mult_fp (fixed_t x, fixed_t y)
+{
+  return (fixed_t) (((int64_t) x) * y / F);
+}
+ 
+/* 고정소수점 * 정수 */
+static inline fixed_t mult_mixed (fixed_t x, int n) { return x * n; }
+ 
+/* 고정소수점 / 고정소수점 (오버플로 방지를 위해 64비트로 계산) */
+static inline fixed_t div_fp (fixed_t x, fixed_t y)
+{
+  return (fixed_t) (((int64_t) x) * F / y);
+}
+ 
+/* 고정소수점 / 정수 */
+static inline fixed_t div_mixed (fixed_t x, int n) { return x / n; }
+ 
 
 #endif /* threads/thread.h */
