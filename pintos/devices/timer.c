@@ -126,12 +126,10 @@ void timer_sleep (int64_t ticks) {
 	struct thread * cur = thread_current(); 			//현제 스레드 
 	cur->wakeup_tick = ticks + start;                    // 언제 깨울지 기록
 	list_insert_ordered(&sleep_list, &cur->elem, wakeup_less, NULL); 		// 나를 찾을 수 있게 등록
-	thread_block ();                                   // 그 다음에 잠들기
+	thread_block ();                                   // timer_interrupt 에서 해제시키기 전까지 잠들기
 	intr_set_level (old_level);                        // 깨어나면 여기부터 실행
 
 	ASSERT (intr_get_level () == INTR_ON);
-	while (timer_elapsed(start) < ticks)
-		thread_yield();
 }
 
 /* Suspends execution for approximately MS milliseconds. */
