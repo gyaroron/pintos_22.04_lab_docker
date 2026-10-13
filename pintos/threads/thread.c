@@ -163,6 +163,11 @@ thread_print_stats (void) {
 			idle_ticks, kernel_ticks, user_ticks);
 }
 
+int mlfqs_calc_priority(struct thread* t)
+{
+}
+
+
 /* Creates a new kernel thread named NAME with the given initial
    PRIORITY, which executes FUNCTION passing AUX as the argument,
    and adds it to the ready queue.  Returns the thread identifier
@@ -193,6 +198,13 @@ thread_create (const char *name, int priority,
 
 	/* Initialize thread. */
 	init_thread (t, name, priority);
+
+	if (thread_mlfqs)
+	{
+		t->base_priority = mlfqs_calc_priority(t);
+		t->priority = mlfqs_calc_priority(t);
+	}
+
 	tid = t->tid = allocate_tid ();
 
 	/* Call the kernel_thread if it scheduled.
@@ -333,6 +345,10 @@ thread_yield (void) {
 /* Sets the current thread's priority to NEW_PRIORITY. */
 void
 thread_set_priority (int new_priority) {
+	if (thread_mlfqs)
+	{
+		return;
+	}
     struct thread *current = thread_current();
     struct thread *highest;
     enum intr_level old_level;
@@ -363,37 +379,72 @@ thread_set_priority (int new_priority) {
     intr_set_level(old_level);
 }
 
+int load_avg;
 /* Returns the current thread's priority. */
 int
 thread_get_priority (void) {
 	return thread_current ()->priority;
 }
 
+void
+mlfqs_calc_priority (struct thread *t) {
+	if (t == idle_thread)
+		return;
+	int p = PRI_MAX - fp_to_int_zero (div_mixed (t->recent_cpu, 4)) - t->nice * 2;
+	if (p > PRI_MAX) p = PRI_MAX;
+	if (p < PRI_MIN) p = PRI_MIN;
+	t->priority = p;
+}
+
+
 /* Sets the current thread's nice value to NICE. */
 void
 thread_set_nice (int nice UNUSED) {
-	/* TODO: Your implementation goes here */
+	enum intr_level old_level = intr_disable ();
+	struct thread *cur = thread_current ();
+
+	cur->nice = nice;
+	mlfqs_calc_priority (cur);
+
+	/* ready_list가 priority 내림차순 정렬이라고 가정 */
+	if (!list_empty (&ready_list)) {
+		struct thread *front = list_entry (list_front (&ready_list), struct thread, elem);
+		if (front->priority > cur->priority) {
+			intr_set_level (old_level);
+			thread_yield ();
+			return;
+		}
+	}
+	intr_set_level (old_level);
 }
 
 /* Returns the current thread's nice value. */
 int
 thread_get_nice (void) {
-	/* TODO: Your implementation goes here */
-	return 0;
+	enum intr_level old_level = intr_disable ();
+	int nice = thread_current ()->nice;
+	intr_set_level (old_level);
+	return nice;
 }
 
 /* Returns 100 times the system load average. */
 int
 thread_get_load_avg (void) {
-	/* TODO: Your implementation goes here */
-	return 0;
+	enum intr_level old_level = intr_disable ();
+	int ret = fp_to_int_round (mult_mixed (load_avg, 100));
+	intr_set_level (old_level);
+	return ret;
 }
 
 /* Returns 100 times the current thread's recent_cpu value. */
 int
 thread_get_recent_cpu (void) {
-	/* TODO: Your implementation goes here */
-	return 0;
+	enum intr_level old_level = intr_disable ();
+	struct thread *t;
+	t = thread_current();
+	int ret = fp_to_int_round(t->recent_cpu * 100);
+	intr_set_level (old_level);
+	return ret;
 }
 
 /* Idle thread.  Executes when no other thread is ready to run.
@@ -462,6 +513,10 @@ init_thread (struct thread *t, const char *name, int priority) {
 	t->waiting_lock = NULL;
 	t->magic = THREAD_MAGIC;
 	t->wakeup_tick = 0;
+
+	//recent_cpu, nice 를 0으로 초기화
+	t->recent_cpu = 0;
+	t->nice = 0;
 }
 
 /* Chooses and returns the next thread to be scheduled.  Should
