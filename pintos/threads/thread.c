@@ -417,8 +417,7 @@ thread_yield (void) {
 	old_level = intr_disable ();
 
 	if (curr != idle_thread) {
-		list_insert_ordered (&ready_list, &curr->elem,
-							thread_priority_more, NULL);
+		list_insert_ordered (&ready_list, &curr->elem, thread_priority_more, NULL);
 	}
 
 	do_schedule (THREAD_READY);
